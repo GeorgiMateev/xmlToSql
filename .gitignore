@@ -11,7 +11,7 @@ lib_managed/
 src_managed/
 project/boot/
 project/plugins/project/
-credentials/
+src/main/resources/credentials/
 .idea/
 
 # Scala-IDE specific

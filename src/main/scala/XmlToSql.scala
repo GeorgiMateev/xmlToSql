@@ -1,12 +1,16 @@
 /**
   * Created by mateev on 11.12.2016 г..
   */
+import java.io.InputStream
+
 import com.databricks.spark.xml.XmlReader
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, Row, SaveMode, SparkSession}
 
 object XmlToSql {
   def main(args: Array[String]): Unit = {
+	  Class.forName("com.mysql.jdbc.Driver").newInstance
+
 	  val localxml = "spark-warehouse/dev_set_android.txt"
 	  val originalQuestionTag = "OrgQuestion"
 
@@ -114,7 +118,8 @@ object XmlToSql {
 	  threads.printSchema()
 	  threads.show()
 
-	  val source = scala.io.Source.fromFile("credentials/db.txt")
+	  val stream : InputStream = getClass.getResourceAsStream("credentials/db.txt")
+	  val source = scala.io.Source.fromInputStream(stream)
 	  val lines = try source.getLines().toArray finally source.close()
 
 	  val host = lines(0)
@@ -125,6 +130,7 @@ object XmlToSql {
 	  val prop = new java.util.Properties()
 	  prop.put("user", user)
 	  prop.put("password", password)
+	  prop.put("driver", "com.mysql.jdbc.Driver")
 	  val url="jdbc:mysql://" + host + "/" + dbName
 
 

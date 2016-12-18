@@ -1,6 +1,24 @@
 # xmlToSql
 Spark app for converting large deeply nested xml files to normalized sql tables
 
+## MySQL connectivity
+- create new file: `src/main/resources/credentials/db.txt`
+- Inside write:
+```
+[Host]:[port]
+[master username]
+[password]
+[database name - this db should already exist]
+```
+
+## Build
+- install sbt
+- run 
+```
+sbt assembly
+```
+- note the location of the produced uber jar, you will need it in the spark-submit script
+
 ## Run locally
 
 ```
