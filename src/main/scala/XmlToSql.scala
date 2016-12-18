@@ -133,7 +133,11 @@ object XmlToSql {
 	  prop.put("driver", "com.mysql.jdbc.Driver")
 	  val url="jdbc:mysql://" + host + "/" + dbName
 
-
 	  originalQuestionsDf.write.mode(SaveMode.Overwrite).jdbc(url, "OrgQuestions", prop)
+	  relatedQuestionsDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelQuestions", prop)
+	  relatedAnswersDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelAnswers", prop)
+	  relatedAnswerCommentsDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelAnswerComments", prop)
+	  relatedQuestionCommentsDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelQuestionComments", prop)
+	  threads.write.mode(SaveMode.Overwrite).jdbc(url, "Threads", prop)
   }
 }
