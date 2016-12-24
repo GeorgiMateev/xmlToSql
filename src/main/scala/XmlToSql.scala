@@ -22,11 +22,11 @@ object XmlToSql {
 
 
 
-	  processXmlFile(originalQuestionTag, localxml)
+	  processXmlFile(originalQuestionTag, localxml, "android")
   }
 	val toNormId = udf((id :String, index :Int) => if(Option(id).isDefined) id.split("_")(index) else "")
 
-	def processXmlFile(originalQuestionTag: String, localxml: String) = {
+	def processXmlFile(originalQuestionTag: String, localxml: String, category: String) = {
 		val sqlContext = SparkSession.builder()
 			.appName("XML to SQL")
 			.enableHiveSupport().config("set spark.sql.crossJoin.enabled", "true")
@@ -37,6 +37,7 @@ object XmlToSql {
 		val originalQuestionsDf = df.drop("Thread")
 			.distinct()
 			.withColumn("id", monotonically_increasing_id())
+		    .withColumn("category", lit(category))
 
 		println("Original questions schema:")
 		originalQuestionsDf.printSchema()
@@ -46,6 +47,7 @@ object XmlToSql {
 			.filter((r: Row) => Option(r.getAs("_RELQ_ID")).isDefined)
 			.distinct()
 			.withColumn("id", monotonically_increasing_id())
+			.withColumn("category", lit(category))
 
 		relatedQuestionsDf = relatedQuestionsDf
 			.withColumn("RELQ_NORM_ID", toNormId(relatedQuestionsDf("_RELQ_ID"), lit(1)))
@@ -63,10 +65,13 @@ object XmlToSql {
 			.drop("RelAComment")
 			.filter((r: Row) => Option(r.getAs("_RELA_ID")).isDefined)
 			.withColumn("id", monotonically_increasing_id())
+			.withColumn("category", lit(category))
 
 		relatedAnswersDf = relatedAnswersDf
 			.withColumn("RELA_NORM_ID", toNormId(
 				relatedAnswersDf("_RELA_ID"), lit(2)))
+			.withColumn("RELQ_NORM_ID", toNormId(
+				relatedAnswersDf("_RELA_ID"), lit(1)))
 
 		println("Related question answers schema:")
 		relatedAnswersDf.printSchema()
@@ -87,9 +92,11 @@ object XmlToSql {
 			.select("ExplodedRelACc.*")
 			.filter((r: Row) => Option(r.getAs("_RELAC_ID")).isDefined)
 			.withColumn("id", monotonically_increasing_id())
+			.withColumn("category", lit(category))
 
 		relatedAnswerCommentsDf = relatedAnswerCommentsDf
 			.withColumn("RELAC_NORM_ID", toNormId(relatedAnswerCommentsDf("_RELAC_ID"), lit(3)))
+			.withColumn("RELA_NORM_ID", toNormId(relatedAnswerCommentsDf("_RELAC_ID"), lit(2)))
 
 		println("Related answer comments schema:")
 		relatedAnswerCommentsDf.printSchema()
@@ -103,9 +110,11 @@ object XmlToSql {
 			.select("ExplodedRelC.*")
 			.filter((r: Row) => Option(r.getAs("_RELC_ID")).isDefined)
 			.withColumn("id", monotonically_increasing_id())
+			.withColumn("category", lit(category))
 
 		relatedQuestionCommentsDf = relatedQuestionCommentsDf
 			.withColumn("RELC_NORM_ID", toNormId(relatedQuestionCommentsDf("_RELC_ID"), lit(2)))
+			.withColumn("RELQ_NORM_ID", toNormId(relatedQuestionCommentsDf("_RELC_ID"), lit(1)))
 
 		println("Related question comments schema:")
 		relatedQuestionCommentsDf.printSchema()
@@ -118,6 +127,7 @@ object XmlToSql {
 		threads = threads
 			.withColumn("ORG_ID", toNormId(threads("_THREAD_SEQUENCE"), lit(0)))
 			.withColumn("REL_ID", toNormId(threads("_THREAD_SEQUENCE"), lit(1)))
+			.withColumn("category", lit(category))
 			.drop("_THREAD_SEQUENCE")
 		println("Threads ids")
 		threads.printSchema()
