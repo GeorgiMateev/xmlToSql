@@ -2,35 +2,71 @@
   * Created by mateev on 11.12.2016 г..
   */
 import java.io.InputStream
+import java.util.Properties
 
 import com.databricks.spark.xml.XmlReader
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, Row, SaveMode, SparkSession}
+import org.apache.spark.sql._
 
 object XmlToSql {
   def main(args: Array[String]): Unit = {
 	  Class.forName("com.mysql.jdbc.Driver").newInstance
 
-	  val localxml = "spark-warehouse/dev_set_android.txt"
+	  val localxmlUsers = "spark-warehouse/stackexchange_android_users.xml"
+
+	  val androidDev = "s3://semeval-stackexchange/SemEval_DevData/dev_set_android.txt"
+	  val englishDev = "s3://semeval-stackexchange/SemEval_DevData/dev_set_english.txt"
+	  val gamingDev = "s3://semeval-stackexchange/SemEval_DevData/dev_set_gaming.txt"
+	  val wordpressDev = "s3://semeval-stackexchange/SemEval_DevData/dev_set_wordpress.txt"
+
 	  val originalQuestionTag = "OrgQuestion"
+
+	  val usersTag = "xml"
 
 	  println("-------------Attach debugger now!--------------")
 	  Thread.sleep(10000) //debug
 
-	  val warehouseLocation = "file:" + System.getProperty("user.dir") + "spark-warehouse"
-	  System.out.println("warehouseLocation" + warehouseLocation)
+	  val androidTrain = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_android_train_v1_2/stackexchange_android_train.xml"
 
+	  val englishTrain = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_english_train_v1_2/stackexchange_english_train.xml"
 
+	  val gamingTrain = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_gaming_train_v1_2/stackexchange_gaming_train.xml"
 
-	  processXmlFile(originalQuestionTag, localxml, "android")
+	  val wordpressTrain = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_wordpress_train_v1_2/stackexchange_wordpress_train.xml"
+
+	  val androidUsers = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_android_train_v1_2/stackexchange_android_users.xml"
+
+	  val englishUsers = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_english_train_v1_2/stackexchange_english_users.xml"
+
+	  val gamingUsers = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_gaming_train_v1_2/stackexchange_gaming_users.xml"
+
+	  val wordpressUsers = "s3://semeval-stackexchange/stackexchange_train_v1_2/stackexchange_wordpress_train_v1_2/stackexchange_wordpress_users.xml"
+
+	  val sqlContext = SparkSession.builder()
+		  .appName("XML to SQL")
+		  .enableHiveSupport().config("set spark.sql.crossJoin.enabled", "true")
+		  .getOrCreate().sqlContext
+
+//	  processXmlFile(sqlContext, originalQuestionTag, androidTrain, "android")
+//	  processXmlFile(sqlContext, originalQuestionTag, englishTrain, "english")
+//	  processXmlFile(sqlContext, originalQuestionTag, gamingTrain, "gaming")
+//	  processXmlFile(sqlContext, originalQuestionTag, wordpressTrain, "wordpress")
+
+	  //processXmlFile(sqlContext, originalQuestionTag, androidDev, "android")
+//	  processXmlFile(sqlContext, originalQuestionTag, englishDev, "english")
+//	  processXmlFile(sqlContext, originalQuestionTag, gamingDev, "gaming")
+//	  processXmlFile(sqlContext, originalQuestionTag, wordpressDev, "wordpress")
+
+	  processUsersXmlFile(sqlContext, usersTag, androidUsers, "android")
+	  processUsersXmlFile(sqlContext, usersTag, englishUsers, "english")
+	  processUsersXmlFile(sqlContext, usersTag, gamingUsers, "gaming")
+	  processUsersXmlFile(sqlContext, usersTag, wordpressUsers, "wordpress")
+
+	  //processUsersXmlFile(sqlContext, "xml", localxmlUsers, "android")
   }
 	val toNormId = udf((id :String, index :Int) => if(Option(id).isDefined) id.split("_")(index) else "")
 
-	def processXmlFile(originalQuestionTag: String, localxml: String, category: String) = {
-		val sqlContext = SparkSession.builder()
-			.appName("XML to SQL")
-			.enableHiveSupport().config("set spark.sql.crossJoin.enabled", "true")
-			.getOrCreate().sqlContext
+	def processXmlFile(sqlContext: SQLContext, originalQuestionTag: String, localxml: String, category: String) = {
 
 		val df = (new XmlReader()).withRowTag(originalQuestionTag).xmlFile(sqlContext, localxml)
 
@@ -133,6 +169,32 @@ object XmlToSql {
 		threads.printSchema()
 		threads.show()
 
+		val (prop: Properties, url: String) = getDBCredentials
+
+		originalQuestionsDf.write.mode(SaveMode.Append).jdbc(url, "OrgQuestions", prop)
+		relatedQuestionsDf.write.mode(SaveMode.Append).jdbc(url, "RelQuestions", prop)
+		relatedAnswersDf.write.mode(SaveMode.Append).jdbc(url, "RelAnswers", prop)
+		relatedAnswerCommentsDf.write.mode(SaveMode.Append).jdbc(url, "RelAnswerComments", prop)
+		relatedQuestionCommentsDf.write.mode(SaveMode.Append).jdbc(url, "RelQuestionComments", prop)
+		threads.write.mode(SaveMode.Append).jdbc(url, "Threads", prop)
+	}
+
+	def processUsersXmlFile(sqlContext: SQLContext, tag: String, filePath: String, category: String) = {
+		val df = (new XmlReader()).withRowTag(tag).xmlFile(sqlContext, filePath)
+			.selectExpr("explode(User) as e").select("e.*")
+			.distinct()
+			.withColumn("id", monotonically_increasing_id())
+			.withColumn("category", lit(category))
+
+		df.printSchema()
+		df.show()
+
+		val (prop: Properties, url: String) = getDBCredentials
+
+		df.write.mode(SaveMode.Append).jdbc(url, "Users", prop)
+	}
+
+	private def getDBCredentials = {
 		val stream: InputStream = getClass.getResourceAsStream("credentials/db.txt")
 		val source = scala.io.Source.fromInputStream(stream)
 		val lines = try source.getLines().toArray finally source.close()
@@ -148,11 +210,6 @@ object XmlToSql {
 		prop.put("driver", "com.mysql.jdbc.Driver")
 		val url = "jdbc:mysql://" + host + "/" + dbName
 
-		originalQuestionsDf.write.mode(SaveMode.Overwrite).jdbc(url, "OrgQuestions", prop)
-		relatedQuestionsDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelQuestions", prop)
-		relatedAnswersDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelAnswers", prop)
-		relatedAnswerCommentsDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelAnswerComments", prop)
-		relatedQuestionCommentsDf.write.mode(SaveMode.Overwrite).jdbc(url, "RelQuestionComments", prop)
-		threads.write.mode(SaveMode.Overwrite).jdbc(url, "Threads", prop)
+		(prop, url)
 	}
 }
